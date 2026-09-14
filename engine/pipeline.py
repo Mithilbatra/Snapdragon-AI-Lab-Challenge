@@ -27,7 +27,7 @@ class MeetingResult:
 class MeetingPipeline:
     def __init__(self, asr_backend: str = "cpu", llm_backend: str = "cpu",
                  language: str = "English", models_dir: str = "models",
-                 asr_model: str = "tiny", llm_model: str = "Qwen/Qwen2.5-0.5B-Instruct"):
+                 asr_model: str = "tiny", llm_model: str = "Qwen/Qwen2.5-1.5B-Instruct"):
         self.language = language
         self.asr = Whisper(backend=asr_backend, model_size=asr_model, models_dir=models_dir)
         self.llm = LocalLLM(backend=llm_backend, model_id=llm_model)
@@ -79,7 +79,7 @@ def main() -> int:
                         choices=["cpu", "genie"])
     parser.add_argument("--asr-model", default=os.getenv("SNAP_ASR_MODEL", "tiny"))
     parser.add_argument("--llm-model",
-                        default=os.getenv("SNAP_LLM_MODEL", "Qwen/Qwen2.5-0.5B-Instruct"))
+                        default=os.getenv("SNAP_LLM_MODEL", "Qwen/Qwen2.5-1.5B-Instruct"))
     parser.add_argument("--language", default="English")
     parser.add_argument("--reply", action="store_true", help="also draft a follow-up email")
     args = parser.parse_args()

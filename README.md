@@ -59,9 +59,12 @@ python -m engine.pipeline --text recordings/sample_meeting.txt --reply
 pytest -q
 ```
 
-The dev backend uses a small 0.5 B model, so summaries are modest; the on-device model is far
-better. Bump the dev model with `LocalLLM(model_id="Qwen/Qwen2.5-1.5B-Instruct")` if you want
-nicer local output.
+The dev backend defaults to Qwen2.5-1.5B (downloaded once, ~3 GB): good English summaries and
+action items with owners, though inference on CPU is slow (~1–3 min per summary) and Indic
+replies are hit-or-miss at this size. The on-device Phi-3.5/Llama-3.2 via Genie is faster and
+handles Indian languages reliably. For a lighter, faster download set
+`SNAP_LLM_MODEL=Qwen/Qwen2.5-0.5B-Instruct`. On Apple Silicon the ONNX path (`edge_infer`) can use
+the Neural Engine via CoreML for local acceleration.
 
 ## Run it on the Snapdragon HP PC
 

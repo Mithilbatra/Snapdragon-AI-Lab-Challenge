@@ -35,7 +35,7 @@ UI = Path(__file__).parent / "ui"
 ASR_BACKEND = os.getenv("SNAP_ASR_BACKEND", "cpu")
 LLM_BACKEND = os.getenv("SNAP_LLM_BACKEND", "cpu")
 ASR_MODEL = os.getenv("SNAP_ASR_MODEL", "tiny")
-LLM_MODEL = os.getenv("SNAP_LLM_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
+LLM_MODEL = os.getenv("SNAP_LLM_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
 
 app = FastAPI(title="SnapAssist", docs_url=None, redoc_url=None)
 

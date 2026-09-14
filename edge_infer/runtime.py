@@ -14,6 +14,7 @@ except ImportError:
     ORT_AVAILABLE = False
 
 QNN_EP = "QNNExecutionProvider"
+COREML_EP = "CoreMLExecutionProvider"
 CPU_EP = "CPUExecutionProvider"
 
 _INSTALL_HINT = (
@@ -28,6 +29,11 @@ def available_providers() -> list[str]:
 
 def has_npu() -> bool:
     return QNN_EP in available_providers()
+
+
+def has_coreml() -> bool:
+    """Apple Neural Engine via ONNX Runtime — lets the ONNX path run accelerated on a Mac."""
+    return COREML_EP in available_providers()
 
 
 def npu_report() -> dict[str, Any]:
@@ -87,6 +93,10 @@ class EdgeSession:
                 opts.add_session_config_entry("ep.context_enable", "1")
                 opts.add_session_config_entry("ep.context_file_path", cache)
             providers.append((QNN_EP, self.qnn_options))
+        elif self.prefer_npu and has_coreml():
+            # No Snapdragon NPU here (e.g. a Mac) — use the Apple Neural Engine instead so the
+            # ONNX path is still hardware-accelerated for local testing.
+            providers.append(COREML_EP)
         providers.append(CPU_EP)
 
         self._session = ort.InferenceSession(self.model_path, opts, providers=providers)
@@ -95,6 +105,11 @@ class EdgeSession:
     @property
     def on_npu(self) -> bool:
         return self.active_provider == QNN_EP
+
+    @property
+    def accelerated(self) -> bool:
+        """True if running on any accelerator (Hexagon NPU or Apple Neural Engine), not plain CPU."""
+        return self.active_provider in (QNN_EP, COREML_EP)
 
     def input_names(self) -> list[str]:
         return [i.name for i in self._session.get_inputs()]
