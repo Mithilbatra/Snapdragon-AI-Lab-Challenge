@@ -30,7 +30,11 @@ RUNTIME = "precompiled_qnn_onnx"
 
 def export_onnx(aihub_id: str) -> int:
     cmd = [sys.executable, "-m", f"qai_hub_models.models.{aihub_id}.export",
-           "--device", DEVICE, "--target-runtime", RUNTIME, "--output-dir", str(MODELS)]
+           "--device", DEVICE, "--target-runtime", RUNTIME, "--output-dir", str(MODELS),
+           # Pin to the QAIRT version the Workbench currently offers; older model releases
+           # otherwise fail against a retired default. Drop these after `pip install -U`.
+           "--compile-options=--qairt_version=default",
+           "--profile-options=--qairt_version=default"]
     print("→", " ".join(cmd))
     return subprocess.call(cmd, cwd=ROOT)
 
