@@ -15,8 +15,8 @@ class ModelSpec:
 
 REGISTRY: dict[str, ModelSpec] = {
     "asr": ModelSpec(
-        "whisper_base", "whisper_base_en", "asr",
-        "Transcription. Use whisper_small for multilingual/Indic input.",
+        "whisper_base", "whisper_base", "asr",
+        "Transcription (multilingual, good for Indic). Alt: whisper_tiny / whisper_small.",
     ),
     "llm": ModelSpec(
         "phi_3_5_mini", "phi_3_5_mini_instruct", "llm",

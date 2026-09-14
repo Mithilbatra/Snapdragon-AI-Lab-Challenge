@@ -27,10 +27,10 @@ Do these **on the device**, in order.
 ## Phase 1b — put the models on the NPU
 
 ### 1. Whisper (ASR) — ONNX + QNN EP
-- Export via AI Hub:
-  ```python
-  from qai_hub_models.models.whisper_base_en import Model
-  # compile to ONNX targeting Snapdragon X Elite, download encoder + decoder into models/
+- Install the model deps and export via AI Hub:
+  ```bash
+  pip install "qai-hub-models[whisper-base]"
+  python -m qai_hub_models.models.whisper_base.export --device "Snapdragon X Elite CRD" --target-runtime onnx
   ```
 - Wire `engine/asr.py::Whisper._transcribe_npu`: log-mel front-end → `EdgeSession(encoder)` →
   greedy/beam decode with `EdgeSession(decoder)`. Reuse `qai_hub_models` Whisper pre/post-processing;

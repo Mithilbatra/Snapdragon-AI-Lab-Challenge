@@ -22,9 +22,12 @@ ROOT = Path(__file__).resolve().parents[1]
 MODELS = ROOT / "models"
 
 
+DEVICE = "Snapdragon X Elite CRD"
+
+
 def export_onnx(aihub_id: str) -> int:
     cmd = [sys.executable, "-m", f"qai_hub_models.models.{aihub_id}.export",
-           "--target-runtime", "onnx", "--output-dir", str(MODELS)]
+           "--device", DEVICE, "--target-runtime", "onnx", "--output-dir", str(MODELS)]
     print("→", " ".join(cmd))
     return subprocess.call(cmd, cwd=ROOT)
 
