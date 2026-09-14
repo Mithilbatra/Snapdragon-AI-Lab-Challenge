@@ -1,1 +1,1 @@
-"""SnapAssist flagship engine: ASR -> LLM -> TTS pipeline built on edge_infer."""
+"""Meeting pipeline: Whisper transcription, LLM summarisation and drafting."""

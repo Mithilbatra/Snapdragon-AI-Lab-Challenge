@@ -1,47 +1,58 @@
-# SnapAssist — Proposal (Snapdragon AI Lab Build & Present Challenge)
+# SnapAssist
 
-> 1-page submission outline. Fill bracketed parts after Phase 1 benchmarks.
+*A private, offline AI meeting assistant for Snapdragon-powered HP PCs.*
+Snapdragon AI Lab — Build & Present Challenge.
 
-## Problem
-Professionals, students, and teams drown in meetings. Existing assistants (Otter, Fireflies,
-Copilot) send audio and notes to the cloud — a non-starter for legal, medical, HR, and any
-privacy-sensitive or low-connectivity setting, and they handle Indian languages poorly.
+## The problem
+Meetings generate notes, decisions and follow-ups that people rarely capture well. The tools that
+help — Otter, Fireflies, Copilot — stream your audio and notes to the cloud. That rules them out
+for anyone handling confidential conversations (legal, medical, HR, finance) or working with poor
+connectivity, and they handle Indian languages badly.
 
-## Solution
-**SnapAssist** — a private, offline AI meeting & notes assistant for Snapdragon HP PCs. It
-records, transcribes, summarizes, extracts action items, and drafts follow-up emails — in
-English and Indian languages — with **everything running on the Hexagon NPU**. No internet, no
-subscription, no data leaving the device. Demonstrated live in airplane mode.
+## The solution
+SnapAssist records a meeting, transcribes it, extracts a summary with decisions and action items,
+drafts the follow-up email, and answers questions about the discussion — in English and Indian
+languages — with every model running on the device's **Hexagon NPU**. No audio, notes or drafts
+leave the laptop. The whole thing is demonstrated in airplane mode.
 
-## Why Snapdragon / on-device (not cloud)
-- **Privacy:** audio + notes never leave the laptop.
-- **Offline:** works with zero connectivity (rural, travel, secure facilities).
-- **Cost:** no per-minute cloud/API fees.
-- **Latency:** real-time captions from the 80–85 TOPS NPU.
+## Why it has to run on Snapdragon / on-device
+- **Privacy** — regulated or sensitive audio never leaves the machine.
+- **Offline** — works with no connectivity, on the ~85 TOPS NPU.
+- **Cost** — no per-minute cloud transcription or API fees.
+- **Latency** — real-time transcription and summarisation on the NPU.
 
-## Technical implementation
-- Reusable `edge_infer` core: ONNX Runtime + **QNN Execution Provider** → Hexagon NPU, with CPU
-  fallback and a benchmark harness.
-- Pipeline (all **Qualcomm AI Hub** models): **Whisper** (ASR) → **Phi-3.5-mini / Llama-3.2-3B**
-  via **Genie** (summary/drafts/Q&A) → **MeloTTS** (optional spoken output).
-- Working prototype today: full offline pipeline (record → transcribe → summarize → draft) in a
-  local web app; CPU baseline measured (whisper-tiny ~11s for an 11s clip; summary ~12–21s).
-- On-device target (Phase 1b, HP Snapdragon PC): **[X]× lower latency on NPU vs CPU**,
-  **[Y] tokens/sec** via Genie — to be measured with `edge_infer.benchmark` and inserted here.
+## How it's built
+A reusable core, `edge_infer`, runs any exported model through ONNX Runtime's **QNN Execution
+Provider** on the NPU, with a CPU fallback for development and a benchmark harness. On top of it,
+the meeting pipeline chains Qualcomm AI Hub models:
 
-## Deployment & accessibility
-- Single Windows ARM64 installer; runs offline out of the box.
-- Spoken responses + Indic language support widen access.
+| Stage | Model (AI Hub) | Runtime |
+|-------|----------------|---------|
+| Transcription | Whisper | ONNX + QNN EP |
+| Summary / decisions / action items / drafts / Q&A | Phi-3.5-mini or Llama-3.2-3B | Genie (NPU) |
+| Spoken read-back (optional) | MeloTTS | ONNX + QNN EP |
+
+The app is a local FastAPI server and an offline web UI (no external dependencies), packaged as a
+single Windows ARM64 executable. Architecture: `docs/architecture.svg`.
+
+## What works today
+The full pipeline runs offline: record/upload/paste → transcribe → summarise → draft → save. The
+web UI shows a live compute badge, an offline indicator and per-request latency. CPU baseline on a
+dev laptop: Whisper-tiny ~11–15 s for an 11 s clip; summary ~11–21 s with a 0.5 B dev model. The
+on-device figures — expected several times faster, with far better summaries from Phi-3.5/Llama-3.2
+via Genie — are measured with `edge_infer.benchmark` during device bring-up and inserted here.
 
 ## Innovation
-- Privacy-first + Indic-first + a reusable open-source NPU runtime — a combination no shipping
-  assistant offers on this hardware.
+Privacy-by-construction + Indic support + a reusable open-source NPU runtime — a combination no
+shipping meeting assistant offers on this hardware.
 
 ## Impact
-- For privacy-bound professionals and the millions in India with limited/expensive connectivity.
+Professionals bound by confidentiality, and the many users in India on limited or costly
+connectivity, get a capable meeting assistant that simply works, privately, with no subscription.
 
-## Architecture diagram
-`[insert docs/architecture.png — see README diagram]`
+---
 
-## Links
-- Demo video: `[link]`   •   Code: `[repo]`   •   `edge_infer` (standalone): `[repo]`
+### Before submitting
+- [ ] Run on the HP Snapdragon PC and paste the NPU-vs-CPU benchmark numbers above.
+- [ ] Record the 3-minute demo video (script: `docs/DEMO_SCRIPT.md`) and link it here.
+- [ ] Add the public code repository URL here.

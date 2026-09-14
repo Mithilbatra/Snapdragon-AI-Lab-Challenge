@@ -19,5 +19,6 @@ recordings/*.wav
 dist/
 build/
 *.spec
+!SnapAssist.spec
 
 .DS_Store

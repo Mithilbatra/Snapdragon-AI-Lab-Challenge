@@ -13,10 +13,10 @@
 |-------|-------|-------|
 | 0 · Environment & proof-of-NPU | ✅ dev / ⬜ device | `verify_npu.py` degrades cleanly off-device; run on the HP PC to confirm QNN |
 | 1 · Core engine (headless) | ✅ done | CPU backend runs offline end-to-end (`engine/pipeline.py`) |
-| 1b · NPU/Genie wiring | ⬜ device-only | code paths + runbook ready (`docs/DEVICE_SETUP.md`); needs the Snapdragon PC |
-| 2 · App shell & UX | ✅ done | FastAPI + offline web UI, verified working in-browser (record/upload/paste → summary → draft → save) |
-| 3 · Differentiators | 🟡 partial | language toggle, compute/offline badge, live latency, history done; NPU meter + streaming captions + MeloTTS pending device |
-| 4 · Package/present/docs | 🟡 partial | diagram, demo script, packaging config, tests, docs done; actual `.exe` builds on the ARM64 device |
+| 1b · NPU/Genie wiring | ⬜ device-only | implemented against the QNN/Genie APIs; validate on the Snapdragon PC (`docs/DEVICE_SETUP.md`) |
+| 2 · App shell & UX | ✅ done | FastAPI + offline web UI, verified in-browser (record/upload/paste → summary → draft → save) |
+| 3 · Differentiators | 🟡 partial | language toggle, compute + latency meter, offline indicator, history done; streaming captions + MeloTTS written, need the device |
+| 4 · Package/present/docs | 🟡 partial | diagram, demo script, `SnapAssist.spec`, tests, docs done; the `.exe` itself builds on the ARM64 device |
 
 ---
 

@@ -1,18 +1,13 @@
-"""SnapAssist local server — FastAPI backend for the offline web UI.
+"""Local FastAPI server for the SnapAssist web UI. Binds to localhost; nothing leaves the device.
 
-Everything runs on localhost against the on-device engine; no request ever leaves the machine.
-Sync endpoints are used deliberately: FastAPI runs them in a threadpool, so a slow model call
-doesn't block the event loop, and we avoid manual executor juggling.
+Backends are selected by environment variable so the same server runs on a dev machine (CPU) and
+on the Snapdragon PC (NPU / Genie) unchanged:
 
-Backends are chosen by env vars so the same server runs on a dev Mac (CPU) and on the
-Snapdragon HP PC (NPU/Genie) with no code change:
-
-    SNAP_ASR_BACKEND = cpu | npu       (default cpu)
-    SNAP_LLM_BACKEND = cpu | genie     (default cpu)
-    SNAP_LLM_MODEL   = <hf id>         (default Qwen/Qwen2.5-0.5B-Instruct, dev only)
-    SNAP_ASR_MODEL   = tiny|base|...   (default tiny, dev only)
-
-Run:  python -m app.server   (or: uvicorn app.server:app)
+    SNAP_ASR_BACKEND  cpu | npu     (default cpu)
+    SNAP_LLM_BACKEND  cpu | genie   (default cpu)
+    SNAP_ASR_MODEL    tiny | base | small           (CPU dev only)
+    SNAP_LLM_MODEL    <hf id>                        (CPU dev only)
+    SNAP_PORT         default 8000
 """
 
 from __future__ import annotations
@@ -22,6 +17,7 @@ import os
 import threading
 import time
 import wave
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -31,11 +27,11 @@ from pydantic import BaseModel
 
 from app.history import History
 from edge_infer import npu_report
-from engine.asr import Transcript, Whisper
+from engine.asr import Whisper
+from engine.audio import resample
 from engine.llm import LocalLLM
 
-UI_DIR = Path(__file__).parent / "ui"
-
+UI = Path(__file__).parent / "ui"
 ASR_BACKEND = os.getenv("SNAP_ASR_BACKEND", "cpu")
 LLM_BACKEND = os.getenv("SNAP_LLM_BACKEND", "cpu")
 ASR_MODEL = os.getenv("SNAP_ASR_MODEL", "tiny")
@@ -43,14 +39,14 @@ LLM_MODEL = os.getenv("SNAP_LLM_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
 
 app = FastAPI(title="SnapAssist", docs_url=None, redoc_url=None)
 
-# --- lazily-loaded, shared model instances (load once, reuse) ---------------
 _lock = threading.Lock()
 _asr: Whisper | None = None
 _llm: LocalLLM | None = None
 _history = History()
+_latency = {"asr": deque(maxlen=10), "llm": deque(maxlen=10)}
 
 
-def get_asr() -> Whisper:
+def asr() -> Whisper:
     global _asr
     with _lock:
         if _asr is None:
@@ -58,7 +54,7 @@ def get_asr() -> Whisper:
         return _asr
 
 
-def get_llm() -> LocalLLM:
+def llm() -> LocalLLM:
     global _llm
     with _lock:
         if _llm is None:
@@ -66,7 +62,6 @@ def get_llm() -> LocalLLM:
         return _llm
 
 
-# --- request models ---------------------------------------------------------
 class SummarizeReq(BaseModel):
     transcript: str
     language: str = "English"
@@ -90,64 +85,70 @@ class SaveReq(BaseModel):
     action_items: list[str] = []
 
 
-# --- helpers ----------------------------------------------------------------
-def _wav_bytes_to_float(data: bytes, target_rate: int = 16000) -> tuple[np.ndarray, int]:
-    """Decode uploaded 16-bit PCM WAV bytes to float mono at target_rate (no ffmpeg)."""
-    with wave.open(io.BytesIO(data), "rb") as w:
-        if w.getsampwidth() != 2:
+def _decode_wav(data: bytes) -> tuple[np.ndarray, int]:
+    with wave.open(io.BytesIO(data), "rb") as wav:
+        if wav.getsampwidth() != 2:
             raise HTTPException(400, "Only 16-bit PCM WAV is supported.")
-        rate = w.getframerate()
-        ch = w.getnchannels()
-        frames = w.readframes(w.getnframes())
-    audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-    if ch > 1:
-        audio = audio.reshape(-1, ch).mean(axis=1)
-    if rate != target_rate:
-        from engine.audio import _resample_linear
-        audio = _resample_linear(audio, rate, target_rate)
-    return audio, target_rate
+        rate, channels = wav.getframerate(), wav.getnchannels()
+        raw = wav.readframes(wav.getnframes())
+    audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    if channels > 1:
+        audio = audio.reshape(-1, channels).mean(axis=1)
+    if rate != 16000:
+        audio, rate = resample(audio, rate, 16000), 16000
+    return audio, rate
 
 
-# --- routes -----------------------------------------------------------------
+def _record_latency(kind: str, seconds: float) -> None:
+    _latency[kind].append(seconds)
+
+
+def _mean(values) -> float | None:
+    return round(sum(values) / len(values), 2) if values else None
+
+
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(UI_DIR / "index.html")
+    return FileResponse(UI / "index.html")
 
 
 @app.get("/app.js")
-def appjs() -> FileResponse:
-    return FileResponse(UI_DIR / "app.js", media_type="application/javascript")
+def script() -> FileResponse:
+    return FileResponse(UI / "app.js", media_type="application/javascript")
 
 
 @app.get("/api/status")
 def status() -> JSONResponse:
-    rep = npu_report()
-    on_npu = ASR_BACKEND == "npu" and rep["npu_available"]
+    report = npu_report()
+    on_npu = ASR_BACKEND == "npu" and report["npu_available"]
     return JSONResponse({
         "asr_backend": ASR_BACKEND,
         "llm_backend": LLM_BACKEND,
-        "asr_model": ASR_MODEL if ASR_BACKEND == "cpu" else "whisper (AI Hub / QNN)",
+        "asr_model": ASR_MODEL if ASR_BACKEND == "cpu" else "Whisper (AI Hub / QNN)",
         "llm_model": LLM_MODEL if LLM_BACKEND == "cpu" else "Phi-3.5 / Llama-3.2 (Genie)",
         "compute": "Hexagon NPU" if on_npu else "CPU (dev)",
-        "npu": rep,
+        "avg_asr_secs": _mean(_latency["asr"]),
+        "avg_llm_secs": _mean(_latency["llm"]),
         "offline": True,
+        "npu": report,
     })
 
 
 @app.post("/api/transcribe")
 def transcribe(file: UploadFile) -> JSONResponse:
-    data = file.file.read()
-    audio, rate = _wav_bytes_to_float(data)
-    asr = get_asr()
-    t0 = time.perf_counter()
-    # Reuse the backend dispatch by writing a tiny in-memory path:
-    tr: Transcript = (asr._transcribe_npu if asr.backend == "npu" else asr._transcribe_cpu)(
-        audio, rate, "en")
+    audio, rate = _decode_wav(file.file.read())
+    engine = asr()
+    start = time.perf_counter()
+    try:
+        result = engine.transcribe(audio, rate, "en")
+    except (RuntimeError, FileNotFoundError, ImportError) as exc:
+        raise HTTPException(503, f"ASR backend not ready: {exc}")
+    elapsed = round(time.perf_counter() - start, 2)
+    _record_latency("asr", elapsed)
     return JSONResponse({
-        "transcript": tr.text,
-        "language": tr.language,
-        "asr_secs": round(time.perf_counter() - t0, 2),
-        "on_npu": asr.on_npu,
+        "transcript": result.text,
+        "asr_secs": elapsed,
+        "on_npu": engine.on_npu,
         "audio_secs": round(len(audio) / rate, 1),
     })
 
@@ -156,37 +157,38 @@ def transcribe(file: UploadFile) -> JSONResponse:
 def summarize(req: SummarizeReq) -> JSONResponse:
     if not req.transcript.strip():
         raise HTTPException(400, "Empty transcript.")
-    llm = get_llm()
-    t0 = time.perf_counter()
-    notes = llm.summarize(req.transcript, language=req.language)
+    start = time.perf_counter()
+    try:
+        notes = llm().summarize(req.transcript, req.language)
+    except (RuntimeError, FileNotFoundError, ImportError) as exc:
+        raise HTTPException(503, f"LLM backend not ready: {exc}")
+    elapsed = round(time.perf_counter() - start, 2)
+    _record_latency("llm", elapsed)
     return JSONResponse({
         "summary": notes.summary,
         "decisions": notes.decisions,
         "action_items": notes.action_items,
-        "llm_secs": round(time.perf_counter() - t0, 2),
+        "llm_secs": elapsed,
     })
 
 
 @app.post("/api/draft")
 def draft(req: DraftReq) -> JSONResponse:
-    llm = get_llm()
-    t0 = time.perf_counter()
-    email = llm.draft_reply(req.summary, language=req.language)
-    return JSONResponse({"email": email, "llm_secs": round(time.perf_counter() - t0, 2)})
+    start = time.perf_counter()
+    email = llm().draft_reply(req.summary, req.language)
+    return JSONResponse({"email": email, "llm_secs": round(time.perf_counter() - start, 2)})
 
 
 @app.post("/api/ask")
 def ask(req: AskReq) -> JSONResponse:
-    llm = get_llm()
-    t0 = time.perf_counter()
-    answer = llm.answer(req.question, req.context)
-    return JSONResponse({"answer": answer, "llm_secs": round(time.perf_counter() - t0, 2)})
+    start = time.perf_counter()
+    answer = llm().answer(req.question, req.context)
+    return JSONResponse({"answer": answer, "llm_secs": round(time.perf_counter() - start, 2)})
 
 
 @app.get("/api/history")
 def history() -> JSONResponse:
-    rows = _history.recent()
-    return JSONResponse([dict(r) for r in rows])
+    return JSONResponse([dict(row) for row in _history.recent()])
 
 
 @app.post("/api/save")
@@ -198,8 +200,7 @@ def save(req: SaveReq) -> JSONResponse:
 def main() -> None:
     import uvicorn
     port = int(os.getenv("SNAP_PORT", "8000"))
-    print(f"SnapAssist → http://127.0.0.1:{port}   "
-          f"(ASR={ASR_BACKEND}, LLM={LLM_BACKEND}, offline)")
+    print(f"SnapAssist on http://127.0.0.1:{port}  (asr={ASR_BACKEND}, llm={LLM_BACKEND}, offline)")
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
 

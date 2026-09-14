@@ -5,9 +5,11 @@ const state = { transcript: "", summary: "", actionItems: [], wavBlob: null };
 // ---- status / badges -------------------------------------------------------
 async function refreshStatus() {
   try {
-    const r = await fetch("/api/status");
-    const s = await r.json();
-    $("#computeText").textContent = s.compute + " · " + (s.llm_backend === "cpu" ? "dev LLM" : "Genie");
+    const s = await (await fetch("/api/status")).json();
+    const lat = [];
+    if (s.avg_asr_secs != null) lat.push(`ASR ${s.avg_asr_secs}s`);
+    if (s.avg_llm_secs != null) lat.push(`LLM ${s.avg_llm_secs}s`);
+    $("#computeText").textContent = s.compute + (lat.length ? " · " + lat.join(" · ") : "");
     $("#computeChip").classList.toggle("npu", s.compute.includes("NPU"));
   } catch { $("#computeText").textContent = "engine offline"; }
 }
@@ -58,6 +60,7 @@ $("#transcribeBtn").addEventListener("click", async () => {
     $("#transcript").value = d.transcript;
     state.transcript = d.transcript;
     $("#asrLat").textContent = `ASR ${d.asr_secs}s · ${d.audio_secs}s audio · ${d.on_npu ? "NPU" : "CPU"}`;
+    refreshStatus();
     document.querySelector('.tab[data-tab="paste"]').click();
   } catch (e) { alert("Transcription error: " + e.message); }
   finally { busy(btn, false); }
@@ -74,6 +77,7 @@ $("#summarizeBtn").addEventListener("click", async () => {
     state.summary = d.summary; state.actionItems = d.action_items || [];
     renderSummary(d);
     $("#llmLat").textContent = `LLM ${d.llm_secs}s`;
+    refreshStatus();
     $("#draftBtn").disabled = false; $("#saveBtn").disabled = false;
   } catch (e) { alert("Summarize error: " + e.message); }
   finally { busy(btn, false); }

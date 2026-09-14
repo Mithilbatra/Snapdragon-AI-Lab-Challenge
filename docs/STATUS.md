@@ -1,44 +1,42 @@
-# SnapAssist — status: what's built, what needs the device
+# Status: built vs. needs the device
 
-This project was scaffolded and developed on a Mac (no Hexagon NPU). Everything that can be built
-and verified without Snapdragon hardware is **done and tested**; the NPU/Genie paths are written
-and documented but can only be validated **on the HP Snapdragon PC**.
+SnapAssist was developed on a Mac, which has no Hexagon NPU. Everything that can be run without
+Snapdragon hardware is implemented and tested; the NPU/Genie code is written against Qualcomm's
+documented interfaces but can only be **validated on the HP Snapdragon PC**.
 
-## ✅ Done and verified (runs offline on any dev machine, CPU)
-- **`edge_infer` core** — QNN-EP session factory with NPU detection + CPU fallback + context
-  caching (`runtime.py`), benchmark harness (`benchmark.py`), model registry (`models.py`).
-  Degrades gracefully when `onnxruntime` / QNN is absent.
-- **Engine (Phase 1)** — Whisper ASR (transformers CPU backend) + LLM summarize/draft/answer
-  (Qwen2.5 CPU backend) + end-to-end `engine/pipeline.py`. Transcribes and summarizes offline.
-- **App (Phase 2)** — FastAPI server + self-contained offline web UI. Verified in a real browser:
-  paste/upload/record → transcribe → summarize (decisions + action items) → draft email → ask →
-  save to local SQLite history. Client-side mic→16 kHz WAV encoding (no ffmpeg, nothing uploaded raw).
-- **Differentiators (Phase 3, partial)** — language selector (English + 6 Indic), compute badge,
-  offline indicator, per-request latency chips, local history.
-- **Phase 4 assets** — architecture diagram (`docs/architecture.svg`), demo script, packaging
-  config (`scripts/build_exe.py`, `app/launcher.py`, `docs/PACKAGING.md`), smoke tests (all pass).
+## Runs and verified here (offline, CPU)
+- **`edge_infer`** — QNN-EP session factory with NPU detection, CPU fallback and context caching;
+  benchmark harness; graceful when `onnxruntime`/QNN is absent.
+- **Engine** — Whisper ASR (CPU) and LLM summarize/draft/answer (CPU) with robust JSON parsing;
+  end-to-end pipeline and CLI.
+- **App** — FastAPI server + offline web UI: record/upload/paste → transcribe → summarise
+  (decisions + action items) → draft email → ask → save to SQLite. Live compute badge, offline
+  indicator, rolling per-request latency. Backend errors surface as 503s, not crashes.
+- **Tests** — 13 passing: NPU report, JSON extraction (prose, code fences, nested braces, bad
+  shapes), WAV loading, status endpoint, pipeline with a fake LLM, backend validation.
+- **Packaging & docs** — architecture diagram, demo script, `SnapAssist.spec` + `build_exe.py` +
+  `launcher.py`, device runbook.
 
-### Measured CPU baseline (this Mac, warm, offline)
+### CPU baseline (dev laptop, warm, offline)
 | Stage | Model | Input | Latency |
 |-------|-------|-------|---------|
-| ASR | whisper-tiny | 11s audio | ~11s |
-| Summarize | Qwen2.5-0.5B | ~550-char transcript | ~12–21s |
-These are the **CPU fallback** numbers. The NPU numbers (expected multiples faster + far better
-LLM quality with Phi-3.5/Llama-3.2) get measured in Phase 1b and pasted into `docs/PROPOSAL.md`.
+| ASR | whisper-tiny | 11 s audio | ~11–15 s |
+| Summarize | Qwen2.5-0.5B | ~550-char transcript | ~11–21 s |
 
-## ⬜ Requires the Snapdragon HP PC (code + runbook ready)
-- **Phase 0 gate** — `python scripts/verify_npu.py` confirming `QNNExecutionProvider`.
-- **Phase 1b** — export AI Hub Whisper (ONNX+QNN) and the Genie LLM bundle; wire
-  `asr.py::_transcribe_npu` and `llm.py::_generate_genie` (both raise a clear error off-device today).
-- **NPU utilization meter**, streaming live captions, MeloTTS spoken output.
-- **Build the `.exe`** (PyInstaller doesn't cross-compile; build on ARM64).
+These are CPU-fallback numbers; the NPU numbers get measured in device bring-up.
 
-Full step-by-step: **`docs/DEVICE_SETUP.md`**.
+## Written, needs the Snapdragon PC to validate
+- **NPU ASR** (`asr.py::_transcribe_npu`) — runs Whisper's encoder/decoder through `EdgeSession`;
+  needs the exported `whisper_*_encoder.onnx` / `_decoder.onnx`. Confirm the exported input names
+  match (standard `input_features` / `input_ids` + `encoder_hidden_states`).
+- **Genie LLM** (`llm.py::_generate_genie`) — calls `genie-t2t-run` against the Genie bundle in
+  `models/genie/`.
+- **MeloTTS** (`tts.py`), **streaming captions** (`asr.py::StreamingTranscriber`, needs a mic +
+  `sounddevice`), and the actual `.exe` (PyInstaller builds on ARM64, not here).
+- **Phase 0 gate** — `python scripts/verify_npu.py` reporting `QNNExecutionProvider`.
 
-## How to run what's built
-```bash
-pip install -r requirements-dev.txt
-python -m app.server            # http://127.0.0.1:8000  (offline)
-python -m engine.pipeline --text recordings/sample_meeting.txt --reply
-pytest -q
-```
+Step-by-step: [DEVICE_SETUP.md](DEVICE_SETUP.md).
+
+## Honest caveat on the dev model
+The 0.5 B dev LLM produces shallow summaries and does not reliably reply in Hindi even though the
+`language` parameter flows end-to-end. Phi-3.5-mini / Llama-3.2-3B via Genie fix both on-device.

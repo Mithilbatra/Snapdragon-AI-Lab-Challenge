@@ -1,10 +1,7 @@
-"""End-to-end meeting flow: audio -> transcript -> notes -> draft reply. All on-device.
+"""End-to-end meeting flow used by both the app and the command line.
 
-Phase 1 milestone: a headless run that takes a recorded clip and prints a summary + action
-items, fully offline. Uses CPU backends on a dev machine; flip to NPU/Genie on the HP PC.
-
-    python -m engine.pipeline recordings/jfk.wav                # CPU dev backends
-    python -m engine.pipeline recordings/meeting.wav --reply    # also draft a follow-up email
+    python -m engine.pipeline recordings/meeting.wav --reply
+    python -m engine.pipeline --text recordings/sample_meeting.txt --reply
 """
 
 from __future__ import annotations
@@ -34,66 +31,62 @@ class MeetingPipeline:
         self.llm = LocalLLM(backend=llm_backend)
 
     def process_recording(self, wav_path: str) -> MeetingResult:
-        t0 = time.perf_counter()
-        transcript = self.asr.transcribe_file(wav_path, language="en").text
-        t1 = time.perf_counter()
-        notes = self.llm.summarize(transcript, language=self.language)
-        t2 = time.perf_counter()
-        return MeetingResult(transcript=transcript, notes=notes, on_npu=self.asr.on_npu,
-                             asr_secs=t1 - t0, llm_secs=t2 - t1)
+        start = time.perf_counter()
+        transcript = self.asr.transcribe_file(wav_path).text
+        asr_secs = time.perf_counter() - start
+
+        start = time.perf_counter()
+        notes = self.llm.summarize(transcript, self.language)
+        return MeetingResult(transcript, notes, self.asr.on_npu, asr_secs,
+                             time.perf_counter() - start)
 
     def process_text(self, transcript: str) -> MeetingResult:
-        """Skip ASR — summarize an existing transcript / pasted notes / email body."""
-        t0 = time.perf_counter()
-        notes = self.llm.summarize(transcript, language=self.language)
-        return MeetingResult(transcript=transcript, notes=notes, on_npu=False,
-                             asr_secs=0.0, llm_secs=time.perf_counter() - t0)
+        start = time.perf_counter()
+        notes = self.llm.summarize(transcript, self.language)
+        return MeetingResult(transcript, notes, False, 0.0, time.perf_counter() - start)
 
     def draft_followup(self, notes: MeetingNotes) -> str:
-        return self.llm.draft_reply(notes.summary, language=self.language)
+        return self.llm.draft_reply(notes.summary, self.language)
 
 
 def _print(result: MeetingResult, reply: str | None) -> None:
-    line = "=" * 68
-    print(f"\n{line}\nSnapAssist — meeting result   [on_npu={result.on_npu}]")
-    print(f"ASR {result.asr_secs:.1f}s · LLM {result.llm_secs:.1f}s (offline)\n{line}")
-    print("\nTRANSCRIPT:\n" + result.transcript)
-    print("\nSUMMARY:\n" + (result.notes.summary or "(none)"))
-    if result.notes.decisions:
-        print("\nDECISIONS:")
-        for d in result.notes.decisions:
-            print(f"  • {d}")
-    if result.notes.action_items:
-        print("\nACTION ITEMS:")
-        for a in result.notes.action_items:
-            print(f"  - {a}")
+    rule = "=" * 68
+    print(f"\n{rule}\nSnapAssist  [on_npu={result.on_npu}]  "
+          f"ASR {result.asr_secs:.1f}s · LLM {result.llm_secs:.1f}s\n{rule}")
+    print(f"\nTranscript:\n{result.transcript}")
+    print(f"\nSummary:\n{result.notes.summary or '(none)'}")
+    for label, items in (("Decisions", result.notes.decisions),
+                         ("Action items", result.notes.action_items)):
+        if items:
+            print(f"\n{label}:")
+            for item in items:
+                print(f"  - {item}")
     if reply is not None:
-        print("\nDRAFT FOLLOW-UP EMAIL:\n" + reply)
-    print(line)
+        print(f"\nDraft follow-up:\n{reply}")
+    print(rule)
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="SnapAssist Phase 1 pipeline")
-    ap.add_argument("wav", nargs="?", help="path to a 16-bit PCM WAV recording")
-    ap.add_argument("--text", help="path to a transcript/notes text file (skips ASR)")
-    ap.add_argument("--asr-backend", default="cpu", choices=["cpu", "npu"])
-    ap.add_argument("--llm-backend", default="cpu", choices=["cpu", "genie"])
-    ap.add_argument("--language", default="English")
-    ap.add_argument("--reply", action="store_true", help="also draft a follow-up email")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser(description="SnapAssist meeting pipeline")
+    parser.add_argument("wav", nargs="?", help="16-bit PCM WAV recording")
+    parser.add_argument("--text", help="transcript/notes file (skips ASR)")
+    parser.add_argument("--asr-backend", default="cpu", choices=["cpu", "npu"])
+    parser.add_argument("--llm-backend", default="cpu", choices=["cpu", "genie"])
+    parser.add_argument("--language", default="English")
+    parser.add_argument("--reply", action="store_true", help="also draft a follow-up email")
+    args = parser.parse_args()
 
     if not args.wav and not args.text:
-        ap.error("provide a WAV path or --text <file>")
+        parser.error("pass a WAV path or --text <file>")
 
-    pipe = MeetingPipeline(asr_backend=args.asr_backend, llm_backend=args.llm_backend,
-                           language=args.language)
+    pipeline = MeetingPipeline(args.asr_backend, args.llm_backend, args.language)
     if args.text:
-        with open(args.text, encoding="utf-8") as f:
-            result = pipe.process_text(f.read())
+        with open(args.text, encoding="utf-8") as fh:
+            result = pipeline.process_text(fh.read())
     else:
-        result = pipe.process_recording(args.wav)
-    reply = pipe.draft_followup(result.notes) if args.reply else None
-    _print(result, reply)
+        result = pipeline.process_recording(args.wav)
+
+    _print(result, pipeline.draft_followup(result.notes) if args.reply else None)
     return 0
 
 
