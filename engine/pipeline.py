@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import time
 from dataclasses import dataclass
 
@@ -25,10 +26,11 @@ class MeetingResult:
 
 class MeetingPipeline:
     def __init__(self, asr_backend: str = "cpu", llm_backend: str = "cpu",
-                 language: str = "English", models_dir: str = "models"):
+                 language: str = "English", models_dir: str = "models",
+                 asr_model: str = "tiny", llm_model: str = "Qwen/Qwen2.5-0.5B-Instruct"):
         self.language = language
-        self.asr = Whisper(backend=asr_backend, models_dir=models_dir)
-        self.llm = LocalLLM(backend=llm_backend)
+        self.asr = Whisper(backend=asr_backend, model_size=asr_model, models_dir=models_dir)
+        self.llm = LocalLLM(backend=llm_backend, model_id=llm_model)
 
     def process_recording(self, wav_path: str) -> MeetingResult:
         start = time.perf_counter()
@@ -67,11 +69,17 @@ def _print(result: MeetingResult, reply: str | None) -> None:
 
 
 def main() -> int:
+    # Environment variables give the defaults so the CLI and the server behave identically.
     parser = argparse.ArgumentParser(description="SnapAssist meeting pipeline")
     parser.add_argument("wav", nargs="?", help="16-bit PCM WAV recording")
     parser.add_argument("--text", help="transcript/notes file (skips ASR)")
-    parser.add_argument("--asr-backend", default="cpu", choices=["cpu", "npu"])
-    parser.add_argument("--llm-backend", default="cpu", choices=["cpu", "genie"])
+    parser.add_argument("--asr-backend", default=os.getenv("SNAP_ASR_BACKEND", "cpu"),
+                        choices=["cpu", "npu"])
+    parser.add_argument("--llm-backend", default=os.getenv("SNAP_LLM_BACKEND", "cpu"),
+                        choices=["cpu", "genie"])
+    parser.add_argument("--asr-model", default=os.getenv("SNAP_ASR_MODEL", "tiny"))
+    parser.add_argument("--llm-model",
+                        default=os.getenv("SNAP_LLM_MODEL", "Qwen/Qwen2.5-0.5B-Instruct"))
     parser.add_argument("--language", default="English")
     parser.add_argument("--reply", action="store_true", help="also draft a follow-up email")
     args = parser.parse_args()
@@ -79,7 +87,8 @@ def main() -> int:
     if not args.wav and not args.text:
         parser.error("pass a WAV path or --text <file>")
 
-    pipeline = MeetingPipeline(args.asr_backend, args.llm_backend, args.language)
+    pipeline = MeetingPipeline(args.asr_backend, args.llm_backend, args.language,
+                               asr_model=args.asr_model, llm_model=args.llm_model)
     if args.text:
         with open(args.text, encoding="utf-8") as fh:
             result = pipeline.process_text(fh.read())

@@ -117,6 +117,13 @@ def script() -> FileResponse:
     return FileResponse(UI / "app.js", media_type="application/javascript")
 
 
+@app.get("/api/sample")
+def sample() -> JSONResponse:
+    path = Path("recordings/sample_meeting.txt")
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    return JSONResponse({"transcript": text})
+
+
 @app.get("/api/status")
 def status() -> JSONResponse:
     report = npu_report()

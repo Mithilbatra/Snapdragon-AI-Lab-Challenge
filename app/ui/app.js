@@ -209,5 +209,12 @@ function encodeWav(samples, rate) {
 
 function escapeHtml(s) { return (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
+$("#loadSample").addEventListener("click", async (e) => {
+  e.preventDefault();
+  const d = await (await fetch("/api/sample")).json();
+  $("#transcript").value = d.transcript;
+  state.transcript = d.transcript;
+});
+
 // init
 refreshStatus(); refreshOnline(); loadHistory();
