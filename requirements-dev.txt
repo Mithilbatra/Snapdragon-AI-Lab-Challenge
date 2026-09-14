@@ -1,0 +1,14 @@
+# Dev backend (CPU) — lets the whole app run on a Mac/x64 machine without a Snapdragon device.
+# The device uses requirements.txt (onnxruntime-qnn + qai-hub*) instead.
+onnxruntime            # CPU EP; verify_npu.py reports gracefully when QNN is absent
+transformers>=4.44
+torch
+numpy
+
+# Web app
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Tests
+pytest

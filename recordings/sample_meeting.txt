@@ -1,0 +1,11 @@
+Priya: Thanks everyone for joining the SnapAssist sprint sync. Let's start with the NPU work.
+Rahul: I got Whisper running on the Hexagon NPU through the QNN execution provider. Latency dropped from about 4 seconds on CPU to under 1 second for a 30-second clip.
+Priya: That's great. Did you check the accuracy didn't regress after quantization?
+Rahul: Word error rate went up by less than one percent, so it's acceptable. I'll write up the benchmark numbers by Thursday.
+Anjali: On the app side, PyQt6 wheels are still broken on Windows ARM64. I think we should switch the UI to the FastAPI plus webview fallback.
+Priya: Agreed, let's make that decision final. Anjali, can you migrate the tray app to the web UI this week?
+Anjali: Yes, I'll have a working prototype by Friday.
+Priya: We also need Hindi transcription for the demo. Rahul, can you export the multilingual Whisper model?
+Rahul: I'll handle that after the benchmarks, probably early next week.
+Priya: One risk: the LLM summary latency is still high. Let's stream tokens so it feels faster. Anjali will own that in the web UI.
+Priya: Okay, decisions: we ship the web UI instead of PyQt, and we demo in airplane mode. Let's wrap up.
