@@ -30,7 +30,8 @@ Do these **on the device**, in order.
 - Install the model deps and export via AI Hub:
   ```bash
   pip install "qai-hub-models[whisper-base]"
-  python -m qai_hub_models.models.whisper_base.export --device "Snapdragon X Elite CRD" --target-runtime onnx
+  # precompiled_qnn_onnx is loadable by ONNX Runtime's QNN EP (plain float onnx isn't offered)
+  python -m qai_hub_models.models.whisper_base.export --device "Snapdragon X Elite CRD" --target-runtime precompiled_qnn_onnx
   ```
 - Wire `engine/asr.py::Whisper._transcribe_npu`: log-mel front-end → `EdgeSession(encoder)` →
   greedy/beam decode with `EdgeSession(decoder)`. Reuse `qai_hub_models` Whisper pre/post-processing;

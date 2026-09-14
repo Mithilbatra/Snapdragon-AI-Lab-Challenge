@@ -23,11 +23,14 @@ MODELS = ROOT / "models"
 
 
 DEVICE = "Snapdragon X Elite CRD"
+# precompiled_qnn_onnx = a QNN context binary wrapped in ONNX, loadable by ONNX Runtime's QNN EP.
+# Most models expose this rather than a plain-onnx float build.
+RUNTIME = "precompiled_qnn_onnx"
 
 
 def export_onnx(aihub_id: str) -> int:
     cmd = [sys.executable, "-m", f"qai_hub_models.models.{aihub_id}.export",
-           "--device", DEVICE, "--target-runtime", "onnx", "--output-dir", str(MODELS)]
+           "--device", DEVICE, "--target-runtime", RUNTIME, "--output-dir", str(MODELS)]
     print("→", " ".join(cmd))
     return subprocess.call(cmd, cwd=ROOT)
 
