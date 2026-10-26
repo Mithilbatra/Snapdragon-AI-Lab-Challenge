@@ -1,0 +1,20 @@
+# Device (Snapdragon Windows ARM64). For a non-Snapdragon dev box use requirements-dev.txt.
+
+# NPU runtime — QNN Execution Provider
+onnxruntime-qnn ; platform_machine == "ARM64"
+onnxruntime ; platform_machine != "ARM64"
+
+# Qualcomm AI Hub (model export)
+qai-hub
+qai-hub-models
+
+# Model I/O and pre/post-processing
+transformers            # Whisper feature extraction + tokenizer
+numpy
+soundfile               # TTS output
+sounddevice             # microphone capture for streaming captions
+
+# App
+fastapi
+uvicorn[standard]
+python-multipart
