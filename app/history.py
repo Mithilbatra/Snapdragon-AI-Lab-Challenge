@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS meetings (
     language     TEXT,
     transcript   TEXT,
     summary      TEXT,
+    decisions    TEXT,
     action_items TEXT
 );
 """
@@ -31,14 +32,19 @@ class History:
         self._lock = threading.Lock()
         with self._lock:
             self.conn.executescript(_SCHEMA)
+            try:  # add decisions to DBs created before this column existed
+                self.conn.execute("ALTER TABLE meetings ADD COLUMN decisions TEXT")
+            except sqlite3.OperationalError:
+                pass
 
-    def add(self, title, language, transcript, summary, action_items) -> int:
+    def add(self, title, language, transcript, summary, decisions, action_items) -> int:
         with self._lock:
             cur = self.conn.execute(
-                "INSERT INTO meetings (created_at, title, language, transcript, summary, action_items)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO meetings"
+                " (created_at, title, language, transcript, summary, decisions, action_items)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (datetime.now(timezone.utc).isoformat(), title, language, transcript, summary,
-                 "\n".join(action_items)),
+                 "\n".join(decisions), "\n".join(action_items)),
             )
             self.conn.commit()
             return cur.lastrowid

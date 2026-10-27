@@ -82,6 +82,7 @@ class SaveReq(BaseModel):
     language: str = "English"
     transcript: str = ""
     summary: str = ""
+    decisions: list[str] = []
     action_items: list[str] = []
 
 
@@ -200,7 +201,8 @@ def history() -> JSONResponse:
 
 @app.post("/api/save")
 def save(req: SaveReq) -> JSONResponse:
-    mid = _history.add(req.title, req.language, req.transcript, req.summary, req.action_items)
+    mid = _history.add(req.title, req.language, req.transcript, req.summary,
+                       req.decisions, req.action_items)
     return JSONResponse({"id": mid})
 
 
