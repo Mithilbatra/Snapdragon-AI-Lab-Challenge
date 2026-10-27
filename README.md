@@ -9,6 +9,16 @@ Genie). No audio, notes or drafts leave the machine, and the whole thing works i
 
 Built for the Snapdragon AI Lab Build & Present Challenge.
 
+## Screenshots
+
+The offline web UI — paste, upload or record a meeting, then summarise and draft a reply:
+
+![SnapAssist — input](docs/screenshots/app-clean.png)
+
+A summarised meeting: summary, decisions and action items, all generated on-device:
+
+![SnapAssist — meeting notes](docs/screenshots/app-summary.png)
+
 ## Layout
 
 SnapAssist is split into a reusable NPU runtime and the app built on top of it:

@@ -1,6 +1,6 @@
 // SnapAssist UI logic — vanilla JS, no external dependencies (must work offline).
 const $ = (s) => document.querySelector(s);
-const state = { transcript: "", summary: "", actionItems: [], wavBlob: null };
+const state = { transcript: "", summary: "", decisions: [], actionItems: [], wavBlob: null };
 
 // ---- status / badges -------------------------------------------------------
 async function refreshStatus() {
@@ -74,7 +74,7 @@ $("#summarizeBtn").addEventListener("click", async () => {
   const btn = $("#summarizeBtn"); busy(btn, true, "Summarizing…");
   try {
     const d = await postJSON("/api/summarize", { transcript, language: $("#lang").value });
-    state.summary = d.summary; state.actionItems = d.action_items || [];
+    state.summary = d.summary; state.decisions = d.decisions || []; state.actionItems = d.action_items || [];
     renderSummary(d);
     $("#llmLat").textContent = `LLM ${d.llm_secs}s`;
     refreshStatus();
@@ -124,7 +124,8 @@ $("#askBtn").addEventListener("click", async () => {
 $("#saveBtn").addEventListener("click", async () => {
   const title = (state.transcript.split(/\s+/).slice(0, 6).join(" ") || "Meeting") + "…";
   await postJSON("/api/save", { title, language: $("#lang").value, transcript: state.transcript,
-                                summary: state.summary, action_items: state.actionItems });
+                                summary: state.summary, decisions: state.decisions,
+                                action_items: state.actionItems });
   loadHistory();
 });
 async function loadHistory() {
@@ -216,5 +217,18 @@ $("#loadSample").addEventListener("click", async (e) => {
   state.transcript = d.transcript;
 });
 
+// Deep-link: /?meeting=<id> renders a saved meeting on load (shareable, and used for previews).
+async function openMeeting(id) {
+  const rows = await (await fetch("/api/history")).json();
+  const m = rows.find((r) => r.id === id);
+  if (!m) return;
+  $("#transcript").value = m.transcript || "";
+  state.transcript = m.transcript || "";
+  const split = (s) => (s || "").split("\n").filter(Boolean);
+  renderSummary({ summary: m.summary, decisions: split(m.decisions), action_items: split(m.action_items) });
+}
+
 // init
 refreshStatus(); refreshOnline(); loadHistory();
+const meetingId = +new URLSearchParams(location.search).get("meeting");
+if (meetingId) openMeeting(meetingId);
